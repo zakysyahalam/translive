@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#080d18" />
+  <meta name="description" content="Live bilingual speech translator for Indonesian and English." />
+  <title>Lingua Live — Indonesian ↔ English</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Lingua Live home">
+        <span class="brand-mark"><span></span><span></span></span>
+        <span>lingua<span class="brand-light">live</span></span>
+      </a>
+      <div class="topbar-right">
+        <span class="privacy-pill"><i></i> Browser speech recognition</span>
+        <button class="icon-button" id="settingsBtn" aria-label="Settings" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <main class="main-layout">
+      <section class="intro">
+        <div class="eyebrow"><span class="eyebrow-line"></span> REAL-TIME CONVERSATION</div>
+        <h1>Two languages.<br><span>One conversation.</span></h1>
+        <p class="intro-copy">Speak naturally. Your words and their translations appear side by side, as the conversation happens.</p>
+        <div class="language-pair">
+          <div class="language-chip"><span class="flag">🇮🇩</span><span><b>Indonesia</b><small>Bahasa Indonesia</small></span></div>
+          <div class="pair-arrow">↔</div>
+          <div class="language-chip"><span class="flag">🇬🇧</span><span><b>English</b><small>United States / UK</small></span></div>
+        </div>
+      </section>
+
+      <section class="translator-card" aria-label="Live translation workspace">
+        <div class="card-head">
+          <div class="session-title"><span class="live-dot" id="liveDot"></span><div><b>Live conversation</b><small id="sessionLabel">Ready when you are</small></div></div>
+          <div class="head-actions"><span class="session-time" id="sessionTime">00:00</span><button class="text-button" id="clearBtn" title="Clear conversation">Clear</button></div>
+        </div>
+        <div class="chat-area" id="chatArea" aria-live="polite">
+          <div class="welcome-state" id="welcomeState">
+            <div class="welcome-icon">✳</div>
+            <h2>Your conversation starts here</h2>
+            <p>Tap the microphone and allow access. Speak in Indonesian or English to see both languages appear.</p>
+            <div class="welcome-hint"><span>🇮🇩</span> Halo, apa kabar? <span class="hint-arrow">→</span> <span>🇬🇧</span> Hello, how are you?</div>
+          </div>
+          <div class="messages" id="messages"></div>
+        </div>
+        <div class="listening-preview" id="listeningPreview" hidden>
+          <span class="wave-mini"><i></i><i></i><i></i><i></i><i></i></span>
+          <span id="previewText">Listening...</span>
+          <span class="preview-label">LIVE</span>
+        </div>
+        <div class="control-panel">
+          <div class="control-topline">
+            <label class="mode-select-wrap">SPEECH MODE
+              <select id="speechMode" aria-label="Speech language mode">
+                <option value="auto">Auto detect (experimental)</option>
+                <option value="id">Bahasa Indonesia</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+            <div class="mic-status" id="micStatus"><span class="status-dot"></span> Microphone off</div>
+          </div>
+          <div class="mic-row">
+            <button class="mic-button" id="micButton" aria-label="Start microphone"><span class="mic-glyph">🎙</span><span class="mic-ripple"></span></button>
+            <div class="mic-copy"><b id="micTitle">Start listening</b><span id="micDescription">Your browser will ask for microphone permission.</span></div>
+            <div class="control-actions">
+              <button class="secondary-button" id="pauseBtn" disabled>Ⅱ <span>Pause</span></button>
+              <button class="end-button" id="stopBtn" disabled>■ <span>End</span></button>
+            </div>
+          </div>
+          <div class="support-note" id="supportNote">Best experience: Google Chrome on desktop or Android. Keep this tab open while translating.</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer"><span>LINGUA LIVE <i>•</i> INDONESIAN ↔ ENGLISH</span><span>Free trial build · No OpenAI key required</span></footer>
+  </div>
+
+  <dialog id="settingsDialog" class="settings-dialog">
+    <form method="dialog"><div class="dialog-head"><div><span class="eyebrow">PREFERENCES</span><h2>Settings</h2></div><button class="icon-button" aria-label="Close settings">✕</button></div>
+      <label class="setting-row"><span><b>Translation service</b><small>MyMemory free public API</small></span><span class="setting-tag">NO KEY</span></label>
+      <label class="setting-field">Contact email (optional)<input id="contactEmail" type="email" placeholder="you@example.com"><small>Optional. MyMemory states that a valid email can increase its daily anonymous allowance. It is sent with translation requests.</small></label>
+      <div class="settings-warning">Free public translation services have daily limits and may occasionally be unavailable. Speech recognition is provided by your browser and may use its own online service.</div>
+      <button class="primary-button" id="saveSettings" value="save">Save settings</button>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
