@@ -25,13 +25,13 @@ Open the local URL printed by Vite, preferably in Google Chrome. `localhost` is 
 ## Deploy to Vercel
 
 1. Extract this ZIP.
-2. Push the contents of the `live-translator` folder to a GitHub repository.
-3. In Vercel, choose **Add New → Project** and import the repository.
-4. Framework preset: **Vite** (or Other). Build command: `npm run build`. Output directory: `dist`.
+2. Open the `live-translator` folder and push the files inside it (not the parent folder) to the root of a GitHub repository. `index.html`, `app.js`, `styles.css`, and `package.json` must be at the repository root.
+3. In Vercel, import that repository. Set the Root Directory to `./` (repository root).
+4. Framework preset: **Vite**. Build command: `npm run build`. Output directory: `dist`. Install command: `npm install`.
 5. Deploy. **Do not add any API key environment variables.**
-6. Open the deployed HTTPS URL in the latest Google Chrome or Microsoft Edge (Firefox desktop is not supported by this Web Speech API build).
-7. Click the large microphone button. The app explicitly calls `getUserMedia()` so the browser permission prompt should appear. Choose **Allow**.
-8. Once permission is granted, speech recognition starts. If you previously blocked permission, open the padlock/site-controls icon beside the address bar and change Microphone to Allow, then reload.
+6. Open the deployed HTTPS URL in Chrome/Edge, click the microphone button, and grant microphone permission.
+
+Important: this release loads `app.js` as a Vite-processed ES module. Do not deploy the raw source folder as a static directory without running the Vite production build.
 
 ## How to test
 
@@ -56,8 +56,3 @@ The microphone starts only after the user clicks Start and grants browser permis
 ## Notes
 
 This is an MVP intended for testing the overall interaction and UI. It is not guaranteed to provide uninterrupted transcription, perfect automatic language detection, or unlimited free translation. For stable high-volume use, a self-hosted speech/translation stack or a paid provider would be needed.
-
-
-## Browser compatibility
-
-Use current Google Chrome or Microsoft Edge on desktop/Android. Firefox desktop does not provide the Web Speech API used for speech recognition in this build. If you open the page in an unsupported browser, the app keeps the page interactive and displays a clear compatibility message instead of silently disabling the microphone control.

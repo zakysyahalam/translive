@@ -175,48 +175,49 @@
   }
   async function beginSession() {
     if (!SpeechRecognition) {
-      toast('Browser ini belum mendukung speech recognition. Buka Lingua Live di Google Chrome atau Microsoft Edge.');
-      els.label.textContent = 'Browser tidak didukung';
-      els.title.textContent = 'Gunakan Chrome atau Edge';
-      els.description.textContent = 'Firefox desktop belum mendukung Web Speech API yang dipakai versi gratis ini.';
+      toast('Speech recognition is not supported here. Please use the latest Google Chrome or Microsoft Edge.');
       return;
     }
-    if (!window.isSecureContext) {
-      toast('Akses microphone membutuhkan HTTPS atau localhost.');
-      els.description.textContent = 'Buka website melalui URL HTTPS atau jalankan di localhost.';
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+      toast('Microphone access requires HTTPS (or localhost) and a browser with microphone support.');
       return;
     }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      toast('Browser tidak menyediakan akses microphone. Gunakan Chrome atau Edge versi terbaru.');
-      return;
-    }
-    els.mic.disabled = true;
-    els.title.textContent = 'Meminta izin microphone…';
-    els.description.textContent = 'Pilih Allow / Izinkan pada popup browser.';
+
+    // Request microphone permission explicitly from the user's Start click.
+    // SpeechRecognition then manages the live recognition session itself.
+    let permissionStream;
     try {
-      // Explicitly trigger the browser permission prompt after the user clicks Start.
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach(track => track.stop());
-      active = true; paused = false; elapsedBeforePause = 0;
-      if (!startRecognition()) { active = false; return; }
-      startClock(); setStatus(true, 'Microphone listening');
-      els.mic.classList.add('listening'); els.mic.setAttribute('aria-label','Microphone listening');
-      els.title.textContent = 'Listening continuously'; els.description.textContent = 'Speak naturally. Your words will appear below.';
-      els.label.textContent = 'Session is live'; els.pause.disabled = false; els.stop.disabled = false;
-      els.pause.innerHTML = 'Ⅱ <span>Pause</span>'; els.preview.hidden = false; els.previewText.textContent = 'Listening for speech…';
+      els.title.textContent = 'Requesting microphone access…';
+      els.description.textContent = 'Allow microphone access in your browser to begin.';
+      permissionStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (error) {
-      const message = error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError'
-        ? 'Izin microphone ditolak. Izinkan microphone melalui ikon gembok / site settings browser.'
+      els.title.textContent = 'Start listening';
+      els.description.textContent = 'Allow microphone access, then try again.';
+      const message = error.name === 'NotAllowedError'
+        ? 'Microphone permission is blocked. Allow it in Chrome site settings and try again.'
         : error.name === 'NotFoundError'
-          ? 'Microphone tidak ditemukan. Periksa perangkat input audio.'
-          : `Tidak dapat mengakses microphone: ${error.message || error.name}`;
+          ? 'No microphone was found. Connect a microphone and try again.'
+          : `Could not access microphone: ${error.message || error.name}`;
       toast(message);
-      els.title.textContent = 'Microphone belum aktif';
-      els.description.textContent = message;
-      els.label.textContent = 'Menunggu izin microphone';
+      return;
     } finally {
-      els.mic.disabled = false;
+      // Stop this temporary permission-check stream; SpeechRecognition opens
+      // its own microphone capture after permission has been granted.
+      if (permissionStream) permissionStream.getTracks().forEach(track => track.stop());
     }
+
+    active = true; paused = false; elapsedBeforePause = 0;
+    if (!startRecognition()) {
+      active = false;
+      els.title.textContent = 'Start listening';
+      els.description.textContent = 'Microphone permission granted, but speech recognition could not start.';
+      return;
+    }
+    startClock(); setStatus(true, 'Microphone listening');
+    els.mic.classList.add('listening'); els.mic.setAttribute('aria-label','Microphone listening');
+    els.title.textContent = 'Listening continuously'; els.description.textContent = 'Speak naturally. Your words will appear below.';
+    els.label.textContent = 'Session is live'; els.pause.disabled = false; els.stop.disabled = false;
+    els.pause.innerHTML = 'Ⅱ <span>Pause</span>'; els.preview.hidden = false; els.previewText.textContent = 'Listening for speech…';
   }
   function pauseSession() {
     if (!active || paused) return;
@@ -247,7 +248,7 @@
   }
 
   els.mic.addEventListener('click', () => {
-    if (!active) beginSession();
+    if (!active) void beginSession();
     else if (paused) resumeSession();
   });
   els.pause.addEventListener('click', () => paused ? resumeSession() : pauseSession());
@@ -274,12 +275,8 @@
   });
   window.addEventListener('beforeunload', () => { active = false; stopRecognizers(); });
 
-  if (!window.isSecureContext) {
-    els.supportNote.textContent = 'Microphone requires HTTPS or localhost. Open the deployed Vercel HTTPS address.';
-  } else if (!SpeechRecognition) {
-    els.supportNote.textContent = 'Browser tidak mendukung speech recognition. Gunakan Google Chrome atau Microsoft Edge terbaru. Tombol Start akan menjelaskan langkah berikutnya.';
-    els.title.textContent = 'Gunakan Chrome atau Edge';
-    els.description.textContent = 'Firefox desktop belum mendukung Web Speech API pada aplikasi gratis ini.';
-    els.label.textContent = 'Browser tidak didukung';
+  if (!SpeechRecognition) {
+    els.supportNote.textContent = 'Speech recognition is not available in this browser. Open this site in Google Chrome or Microsoft Edge.';
+    els.mic.disabled = true; els.mic.style.opacity = '.45';
   }
 })();
