@@ -7,7 +7,8 @@
     preview: $('listeningPreview'), previewText: $('previewText'), status: $('micStatus'),
     title: $('micTitle'), description: $('micDescription'), label: $('sessionLabel'),
     liveDot: $('liveDot'), timer: $('sessionTime'), toast: $('toast'), settings: $('settingsDialog'),
-    settingsBtn: $('settingsBtn'), email: $('contactEmail'), saveSettings: $('saveSettings')
+    settingsBtn: $('settingsBtn'), email: $('contactEmail'), saveSettings: $('saveSettings'),
+    translatorCard: $('translatorCard'), maximize: $('maximizeBtn')
   };
   let recognizers = [], active = false, paused = false, sessionStarted = 0, timerId = null;
   let elapsedBeforePause = 0, lastToast = 0, lastFinal = '', lastFinalAt = 0, pendingTranslation = 0;
@@ -326,6 +327,37 @@
       stopRecognizers();
       if (!wasPaused) startRecognition();
       toast('Speech mode updated.');
+    }
+  });
+  async function toggleFullscreen() {
+    const card = els.translatorCard;
+    try {
+      if (document.fullscreenElement === card) {
+        await document.exitFullscreen();
+      } else if (card.requestFullscreen) {
+        await card.requestFullscreen();
+      } else {
+        // Fallback for browsers without the Fullscreen API.
+        card.classList.toggle('fullscreen-fallback');
+      }
+    } catch (error) {
+      card.classList.toggle('fullscreen-fallback');
+      toast('Using expanded conversation view.');
+    }
+    updateFullscreenButton();
+  }
+  function updateFullscreenButton() {
+    const expanded = document.fullscreenElement === els.translatorCard || els.translatorCard.classList.contains('fullscreen-fallback');
+    els.maximize.textContent = expanded ? '⤢' : '⛶';
+    els.maximize.title = expanded ? 'Exit fullscreen' : 'Enter fullscreen';
+    els.maximize.setAttribute('aria-label', expanded ? 'Exit fullscreen' : 'Enter fullscreen');
+  }
+  els.maximize.addEventListener('click', toggleFullscreen);
+  document.addEventListener('fullscreenchange', updateFullscreenButton);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && els.translatorCard.classList.contains('fullscreen-fallback')) {
+      els.translatorCard.classList.remove('fullscreen-fallback');
+      updateFullscreenButton();
     }
   });
   els.settingsBtn.addEventListener('click', () => els.settings.showModal());

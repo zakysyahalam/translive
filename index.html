@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#080d18" />
   <meta name="description" content="Live bilingual speech translator for Indonesian and English." />
-  <title>Lingua Live — Indonesian ↔ English</title>
+  <title>Translive — Indonesian ↔ English</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -14,9 +14,9 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="#" aria-label="Lingua Live home">
+      <a class="brand" href="#" aria-label="Translive home">
         <span class="brand-mark"><span></span><span></span></span>
-        <span>lingua<span class="brand-light">live</span></span>
+        <span>trans<span class="brand-light">live</span></span>
       </a>
       <div class="topbar-right">
         <span class="privacy-pill"><i></i> Browser speech recognition</span>
@@ -36,10 +36,10 @@
         </div>
       </section>
 
-      <section class="translator-card" aria-label="Live translation workspace">
+      <section class="translator-card" id="translatorCard" aria-label="Live translation workspace">
         <div class="card-head">
           <div class="session-title"><span class="live-dot" id="liveDot"></span><div><b>Live conversation</b><small id="sessionLabel">Ready when you are</small></div></div>
-          <div class="head-actions"><span class="session-time" id="sessionTime">00:00</span><button class="text-button" id="clearBtn" title="Clear conversation">Clear</button></div>
+          <div class="head-actions"><span class="session-time" id="sessionTime">00:00</span><button class="text-button" id="clearBtn" title="Clear conversation">Clear</button><button class="icon-button maximize-button" id="maximizeBtn" type="button" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button></div>
         </div>
         <div class="chat-area" id="chatArea" aria-live="polite">
           <div class="welcome-state" id="welcomeState">
@@ -79,7 +79,7 @@
       </section>
     </main>
 
-    <footer class="footer"><span>LINGUA LIVE <i>•</i> INDONESIAN ↔ ENGLISH</span><span>Free trial build · No OpenAI key required</span></footer>
+    <footer class="footer"><span>TRANSLIVE <i>•</i> INDONESIAN ↔ ENGLISH</span><span>Free trial build · No OpenAI key required</span></footer>
   </div>
 
   <dialog id="settingsDialog" class="settings-dialog">

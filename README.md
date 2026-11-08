@@ -1,4 +1,4 @@
-# Lingua Live — Free MVP (Indonesia ↔ English)
+# Translive — Free MVP (Indonesia ↔ English)
 
 A responsive browser-based live speech translator starter intended for Vercel. This version does **not** use OpenAI, does not require an API key, and does not require a credit card.
 
