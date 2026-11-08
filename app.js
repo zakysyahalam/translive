@@ -173,15 +173,50 @@
     recognizers.forEach((rec) => { try { rec.onend = null; rec.stop(); } catch (_) {} });
     recognizers = [];
   }
-  function beginSession() {
-    if (!SpeechRecognition) { toast('Please open this website in Google Chrome or Microsoft Edge.'); return; }
-    active = true; paused = false; elapsedBeforePause = 0;
-    if (!startRecognition()) { active = false; return; }
-    startClock(); setStatus(true, 'Microphone listening');
-    els.mic.classList.add('listening'); els.mic.setAttribute('aria-label','Microphone listening');
-    els.title.textContent = 'Listening continuously'; els.description.textContent = 'Speak naturally. Your words will appear below.';
-    els.label.textContent = 'Session is live'; els.pause.disabled = false; els.stop.disabled = false;
-    els.pause.innerHTML = 'Ⅱ <span>Pause</span>'; els.preview.hidden = false; els.previewText.textContent = 'Listening for speech…';
+  async function beginSession() {
+    if (!SpeechRecognition) {
+      toast('Browser ini belum mendukung speech recognition. Buka Lingua Live di Google Chrome atau Microsoft Edge.');
+      els.label.textContent = 'Browser tidak didukung';
+      els.title.textContent = 'Gunakan Chrome atau Edge';
+      els.description.textContent = 'Firefox desktop belum mendukung Web Speech API yang dipakai versi gratis ini.';
+      return;
+    }
+    if (!window.isSecureContext) {
+      toast('Akses microphone membutuhkan HTTPS atau localhost.');
+      els.description.textContent = 'Buka website melalui URL HTTPS atau jalankan di localhost.';
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast('Browser tidak menyediakan akses microphone. Gunakan Chrome atau Edge versi terbaru.');
+      return;
+    }
+    els.mic.disabled = true;
+    els.title.textContent = 'Meminta izin microphone…';
+    els.description.textContent = 'Pilih Allow / Izinkan pada popup browser.';
+    try {
+      // Explicitly trigger the browser permission prompt after the user clicks Start.
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      active = true; paused = false; elapsedBeforePause = 0;
+      if (!startRecognition()) { active = false; return; }
+      startClock(); setStatus(true, 'Microphone listening');
+      els.mic.classList.add('listening'); els.mic.setAttribute('aria-label','Microphone listening');
+      els.title.textContent = 'Listening continuously'; els.description.textContent = 'Speak naturally. Your words will appear below.';
+      els.label.textContent = 'Session is live'; els.pause.disabled = false; els.stop.disabled = false;
+      els.pause.innerHTML = 'Ⅱ <span>Pause</span>'; els.preview.hidden = false; els.previewText.textContent = 'Listening for speech…';
+    } catch (error) {
+      const message = error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError'
+        ? 'Izin microphone ditolak. Izinkan microphone melalui ikon gembok / site settings browser.'
+        : error.name === 'NotFoundError'
+          ? 'Microphone tidak ditemukan. Periksa perangkat input audio.'
+          : `Tidak dapat mengakses microphone: ${error.message || error.name}`;
+      toast(message);
+      els.title.textContent = 'Microphone belum aktif';
+      els.description.textContent = message;
+      els.label.textContent = 'Menunggu izin microphone';
+    } finally {
+      els.mic.disabled = false;
+    }
   }
   function pauseSession() {
     if (!active || paused) return;
@@ -239,8 +274,12 @@
   });
   window.addEventListener('beforeunload', () => { active = false; stopRecognizers(); });
 
-  if (!SpeechRecognition) {
-    els.supportNote.textContent = 'Speech recognition is not available in this browser. Open this site in Google Chrome or Microsoft Edge.';
-    els.mic.disabled = true; els.mic.style.opacity = '.45';
+  if (!window.isSecureContext) {
+    els.supportNote.textContent = 'Microphone requires HTTPS or localhost. Open the deployed Vercel HTTPS address.';
+  } else if (!SpeechRecognition) {
+    els.supportNote.textContent = 'Browser tidak mendukung speech recognition. Gunakan Google Chrome atau Microsoft Edge terbaru. Tombol Start akan menjelaskan langkah berikutnya.';
+    els.title.textContent = 'Gunakan Chrome atau Edge';
+    els.description.textContent = 'Firefox desktop belum mendukung Web Speech API pada aplikasi gratis ini.';
+    els.label.textContent = 'Browser tidak didukung';
   }
 })();
