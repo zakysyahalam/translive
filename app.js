@@ -12,6 +12,9 @@
   let recognizers = [], active = false, paused = false, sessionStarted = 0, timerId = null;
   let elapsedBeforePause = 0, lastToast = 0, lastFinal = '', lastFinalAt = 0, pendingTranslation = 0;
   let interimNodes = new Map();
+  let autoCandidates = [];
+  let autoFlushTimer = null;
+  const interimByLanguage = new Map();
   const CONTACT_KEY = 'lingua-contact-email';
   els.email.value = localStorage.getItem(CONTACT_KEY) || '';
 
@@ -103,18 +106,52 @@
   function languageScore(text, lang) {
     const t = ` ${text.toLowerCase().replace(/[^a-zà-ÿ\s]/g, ' ')} `;
     const words = lang === 'id'
-      ? [' saya ',' kamu ',' yang ',' dan ',' tidak ',' apa ',' ini ',' itu ',' dengan ',' untuk ',' kalau ',' sudah ',' bisa ',' ingin ',' dari ',' banget ',' bagaimana ',' karena ',' sedang ']
-      : [' the ',' you ',' is ',' are ',' and ',' what ',' how ',' this ',' that ',' with ',' for ',' have ',' would ',' could ',' hello ',' please ',' thank ',' today ',' want ',' can '];
+      ? [' saya ',' aku ',' kamu ',' anda ',' yang ',' dan ',' tidak ',' apa ',' ini ',' itu ',' dengan ',' untuk ',' kalau ',' sudah ',' bisa ',' ingin ',' dari ',' banget ',' bagaimana ',' karena ',' sedang ',' adalah ',' akan ',' belum ',' mereka ',' kita ',' tetapi ',' atau ',' dimana ',' kapan ',' siapa ',' mengapa ',' tolong ',' terima kasih ',' selamat ']
+      : [' the ',' you ',' is ',' are ',' and ',' what ',' how ',' this ',' that ',' with ',' for ',' have ',' would ',' could ',' hello ',' please ',' thank ',' today ',' want ',' can ',' i ',' we ',' they ',' he ',' she ',' it ',' my ',' your ',' our ',' me ',' do ',' does ',' did ',' not ',' yes ',' no ',' good ',' morning ',' name ',' because ',' but ',' or ',' where ',' when ',' who ',' why ',' welcome ',' nice ',' meet ',' like ',' need ',' going ',' will ',' was ',' were '];
     return words.reduce((score, word) => score + (t.includes(word) ? 1 : 0), 0);
   }
-  function detectFromText(text, recognizerLang, confidence) {
+  function detectFromText(text, recognizerLang, confidence = 0) {
     if (els.mode.value === 'id') return 'id';
     if (els.mode.value === 'en') return 'en';
-    const idScore = languageScore(text, 'id'), enScore = languageScore(text, 'en');
+    const idScore = languageScore(text, 'id');
+    const enScore = languageScore(text, 'en');
     if (idScore > enScore) return 'id';
     if (enScore > idScore) return 'en';
-    // In auto mode, the recognizer language is used as a fallback hint.
+    // With no clear lexical signal, use the recognizer that produced the
+    // strongest result. This is a best-effort fallback, not true language ID.
     return recognizerLang.startsWith('id') ? 'id' : 'en';
+  }
+
+  function candidateQuality(candidate) {
+    const idScore = languageScore(candidate.text, 'id');
+    const enScore = languageScore(candidate.text, 'en');
+    const lexicalSignal = Math.abs(idScore - enScore);
+    const expectedLang = idScore > enScore ? 'id' : enScore > idScore ? 'en' : null;
+    const recognizerLang = candidate.recognizerLang.startsWith('id') ? 'id' : 'en';
+    const recognizerMatches = expectedLang && expectedLang === recognizerLang ? 0.3 : 0;
+    return (candidate.confidence || 0) + lexicalSignal * 0.45 + recognizerMatches;
+  }
+
+  function queueAutoCandidate(text, recognizerLang, confidence) {
+    autoCandidates.push({ text, recognizerLang, confidence });
+    clearTimeout(autoFlushTimer);
+    autoFlushTimer = setTimeout(() => {
+      const candidates = autoCandidates.splice(0);
+      if (!candidates.length || !active || paused || els.mode.value !== 'auto') return;
+      // Collapse exact/near-identical alternatives emitted by both engines.
+      const unique = [];
+      for (const candidate of candidates) {
+        const normalized = candidate.text.toLowerCase().replace(/[^a-z0-9à-ÿ]+/g, ' ').trim();
+        const existing = unique.find(item => item.normalized === normalized);
+        if (!existing) unique.push({ ...candidate, normalized });
+        else if (candidateQuality(candidate) > candidateQuality(existing)) Object.assign(existing, candidate, { normalized });
+      }
+      unique.sort((a, b) => candidateQuality(b) - candidateQuality(a));
+      const best = unique[0];
+      const detected = detectFromText(best.text, best.recognizerLang, best.confidence);
+      commitPhrase(best.text, detected);
+      els.preview.hidden = true;
+    }, 650);
   }
 
   function createRecognizer(lang) {
@@ -126,30 +163,38 @@
         const result = event.results[i];
         const transcript = cleanText(result[0]?.transcript || '');
         if (!transcript) continue;
+        const confidence = result[0]?.confidence || 0;
         if (result.isFinal) {
-          const detected = detectFromText(transcript, lang, result[0]?.confidence || 0);
-          commitPhrase(transcript, detected);
-          els.preview.hidden = true;
+          if (els.mode.value === 'auto') queueAutoCandidate(transcript, lang, confidence);
+          else {
+            commitPhrase(transcript, lang.startsWith('id') ? 'id' : 'en');
+            els.preview.hidden = true;
+          }
         } else interim += `${transcript} `;
       }
       if (interim.trim()) {
+        interimByLanguage.set(lang, interim.trim());
+        const previewText = els.mode.value === 'auto'
+          ? [...interimByLanguage.values()].sort((a, b) => b.length - a.length)[0]
+          : interim.trim();
         els.preview.hidden = false;
-        els.previewText.textContent = interim.trim();
-        scrollBottom();
+        els.previewText.textContent = previewText || 'Listening…';
+      } else if (event.results.length) {
+        interimByLanguage.delete(lang);
       }
     };
     rec.onerror = (event) => {
       if (['no-speech','aborted'].includes(event.error)) return;
       const message = event.error === 'not-allowed' ? 'Microphone permission was denied. Allow it in your browser settings.'
         : event.error === 'audio-capture' ? 'No microphone was detected.'
-        : `Speech recognition error: ${event.error}`;
+        : `Speech recognition (${lang}) error: ${event.error}`;
+      // In Auto mode one engine can fail while the other remains usable.
       toast(message);
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') endSession(false);
     };
     rec.onend = () => {
       if (active && !paused) {
-        // Chrome may end recognition after silence; restart it while the session is active.
-        setTimeout(() => { if (active && !paused) { try { rec.start(); } catch (_) {} } }, 250);
+        setTimeout(() => { if (active && !paused && recognizers.includes(rec)) { try { rec.start(); } catch (_) {} } }, 300);
       }
     };
     return rec;
@@ -160,16 +205,33 @@
       toast('Speech recognition is not supported in this browser. Please use Google Chrome.');
       return false;
     }
+    clearTimeout(autoFlushTimer);
+    autoCandidates = [];
+    interimByLanguage.clear();
     const mode = els.mode.value;
-    const langs = mode === 'id' ? ['id-ID'] : mode === 'en' ? ['en-US'] : ['id-ID','en-US'];
+    const langs = mode === 'id' ? ['id-ID'] : mode === 'en' ? ['en-US'] : ['id-ID', 'en-US'];
     recognizers = langs.map(createRecognizer);
     let started = 0;
-    recognizers.forEach((rec) => { try { rec.start(); started++; } catch (e) { console.warn('Could not start recognition:', e); } });
-    if (!started) { toast('Could not start speech recognition. Reload the page and try again.'); return false; }
-    if (mode === 'auto' && started === 1) toast('Only one speech engine started. Auto detection may be less accurate.');
+    // Start the two language candidates slightly apart to avoid racing the
+    // browser's microphone initialization. Auto mode scores the finalized
+    // alternatives and commits one candidate instead of duplicating both.
+    recognizers.forEach((rec, index) => {
+      const delay = mode === 'auto' ? index * 250 : 0;
+      setTimeout(() => {
+        if (!active || paused || !recognizers.includes(rec)) return;
+        try { rec.start(); started++; }
+        catch (error) {
+          console.warn(`Could not start ${rec.lang} recognition:`, error);
+          if (mode === 'auto' && started === 0 && index === langs.length - 1) {
+            toast('Auto Detect could not start either language engine. Try a fixed speech mode.');
+          }
+        }
+      }, delay);
+    });
     return true;
   }
   function stopRecognizers() {
+    clearTimeout(autoFlushTimer); autoCandidates = []; interimByLanguage.clear();
     recognizers.forEach((rec) => { try { rec.onend = null; rec.stop(); } catch (_) {} });
     recognizers = [];
   }

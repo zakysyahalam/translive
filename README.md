@@ -8,7 +8,7 @@ A responsive browser-based live speech translator starter intended for Vercel. T
 - **Translation:** uses the public MyMemory translation endpoint directly from the browser. Its published anonymous limit is 5,000 characters/day. MyMemory says adding a valid contact email via the `de` parameter can raise the limit to 50,000 characters/day. The email is optional and is sent with translation requests if entered in Settings.
 - **No API key:** no `OPENAI_API_KEY`, LibreTranslate key, or other secret is needed.
 - **Availability:** MyMemory is a public third-party service. It may rate-limit, change its policy, or be temporarily unavailable. This is a free test build, not a guaranteed production SLA.
-- **Automatic speech-language detection:** Auto mode starts Indonesian and English browser recognition engines in parallel and uses simple phrase heuristics to choose the displayed source language. This is experimental; browser implementations may not support simultaneous recognition engines reliably. If it behaves inconsistently, choose Indonesian or English manually from Speech Mode.
+- **Automatic speech-language detection:** Auto mode starts Indonesian and English browser recognition candidates with a short stagger, gathers finalized alternatives briefly, then scores them using recognition confidence and language-specific word clues to choose one transcript. This is still heuristic: Web Speech API does not expose reliable built-in automatic language identification, and simultaneous recognition support varies by browser. For best accuracy, fixed Indonesian or English modes remain available.
 - **Translation timing:** interim speech is shown in the listening preview. Paired chat bubbles are created when the browser finalizes a phrase; the translation appears after the MyMemory request completes. This is near-real-time, not word-by-word simultaneous interpretation.
 
 ## Run locally
@@ -32,6 +32,11 @@ Open the local URL printed by Vite, preferably in Google Chrome. `localhost` is 
 6. Open the deployed HTTPS URL in Chrome/Edge, click the microphone button, and grant microphone permission.
 
 Important: this release loads `app.js` as a Vite-processed ES module. Do not deploy the raw source folder as a static directory without running the Vite production build.
+
+## Version 1.4 updates
+
+- Auto mode now batches competing Indonesian/English recognition candidates, scores them, and commits one selected transcript to reduce duplicate or conflicting bubbles.
+- The conversation card now has a fixed height; only the chat history area scrolls internally as messages accumulate.
 
 ## How to test
 
