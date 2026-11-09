@@ -1,6 +1,7 @@
 import { pipeline, env } from '@huggingface/transformers';
 
 (() => {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const $ = (id) => document.getElementById(id);
   const els = {
     mic: $('micButton'), pause: $('pauseBtn'), stop: $('stopBtn'), clear: $('clearBtn'),
@@ -11,11 +12,12 @@ import { pipeline, env } from '@huggingface/transformers';
     settingsBtn: $('settingsBtn'), email: $('contactEmail'), saveSettings: $('saveSettings'),
     translatorCard: $('translatorCard'), maximize: $('maximizeBtn'), support: $('supportNote')
   };
-  let active = false, paused = false, sessionStarted = 0, timerId = null;
-  let elapsedBeforePause = 0, toastTimer = null, lastFinal = '', lastFinalAt = 0;
+
+  let active = false, paused = false, sessionStarted = 0, timerId = null, elapsedBeforePause = 0;
+  let toastTimer = null, lastFinal = '', lastFinalAt = 0, recognizer = null;
   let transcriber = null, modelPromise = null, audioContext = null, displayStream = null, micStream = null;
-  let processor = null, silentGain = null, audioSources = [], sampleQueue = [], queuedSamples = 0;
-  let processing = false, processTimer = null, sessionSource = 'microphone';
+  let processor = null, silentGain = null, desktopSource = null, sampleQueue = [], queuedSamples = 0;
+  let processing = false, sessionSource = 'microphone';
   const CONTACT_KEY = 'translive-contact-email';
   els.email.value = localStorage.getItem(CONTACT_KEY) || '';
   env.allowLocalModels = true;
@@ -72,62 +74,72 @@ import { pipeline, env } from '@huggingface/transformers';
     if (data.responseStatus !== 200 || !data.responseData?.translatedText) throw new Error(data.responseDetails || 'Translation unavailable.');
     return data.responseData.translatedText;
   }
-  // Auto Detect intentionally accepts only Indonesian or English. Whisper can
-  // recognize many languages, so we validate its transcript against a compact
-  // two-language vocabulary before allowing it into the conversation.
-  const LANGUAGE_MARKERS = {
-    id: new Set(['saya','aku','kamu','anda','yang','dan','tidak','apa','kabar','ini','itu','dengan','untuk','kalau','sudah','bisa','ingin','dari','banget','bagaimana','karena','sedang','adalah','akan','belum','mereka','kita','tetapi','atau','dimana','kapan','siapa','mengapa','tolong','terima','kasih','selamat','nggak','enggak','punya','jadi','pada','dalam','lebih','juga','cuma','masih','tadi','nanti','sekarang','iya','enggak','aja','sih','kok','gimana','kenapa','berapa','boleh','mau','ada','bukan','udah','belum']),
-    en: new Set(['the','you','is','are','and','what','how','this','that','with','for','have','would','could','hello','please','thank','today','want','can','we','they','he','she','it','my','your','our','me','does','did','not','yes','no','good','morning','name','because','but','or','where','when','who','why','welcome','nice','meet','like','need','going','will','was','were','has','had','there','here','from','about','just','really','right','okay','sure','hello','thanks','goodbye','are','am','is','do','does','done','could','should','would','have','has','had','please','sorry','morning','afternoon','evening','night','work','meeting','today','tomorrow'])
-  };
-  function languageScore(text, lang) {
-    const words = cleanText(text.toLowerCase()).match(/[a-zà-ÿ]+/g) || [];
-    return words.reduce((score, word) => score + (LANGUAGE_MARKERS[lang].has(word) ? 1 : 0), 0);
-  }
-  function detectLanguage(text) {
-    if (els.mode.value === 'id') return 'id';
-    if (els.mode.value === 'en') return 'en';
-    const id = languageScore(text, 'id'), en = languageScore(text, 'en');
-    if (id === 0 && en === 0) return null;
-    if (id > en) return 'id';
-    if (en > id) return 'en';
-    // Indonesian affixes and particles help resolve short, otherwise ambiguous phrases.
-    if (/\b(ber[a-z]+|meng[a-z]+|men[a-z]+|ter[a-z]+|\w+nya|\w+kan|\w+lah|aja|sih|kok|gimana|enggak|nggak)\b/i.test(text)) return 'id';
-    // Do not guess a language when the evidence is tied or too weak.
-    return null;
-  }
-  async function commitPhrase(rawText) {
+  async function commitPhrase(rawText, sourceLang) {
     const text = cleanText(rawText);
-    if (text.length < 3 || !/[a-zà-ÿ]{2}/i.test(text)) return;
+    if (text.length < 2 || !/[a-zà-ÿ]{2}/i.test(text)) return;
     const stamp = Date.now();
-    if (text.toLowerCase() === lastFinal.toLowerCase() && stamp - lastFinalAt < 2500) return;
+    if (text.toLowerCase() === lastFinal.toLowerCase() && stamp - lastFinalAt < 2200) return;
     lastFinal = text; lastFinalAt = stamp;
-    const lang = detectLanguage(text);
-    if (!lang) {
-      if (els.mode.value === 'auto') {
-        els.preview.hidden = false;
-        els.previewText.textContent = 'Auto Detect supports Indonesian and English only. Keep speaking in either language.';
-      }
-      return;
-    }
-    const message = makePair(text, lang, true);
+    const message = makePair(text, sourceLang, true);
     try {
-      const translated = await translateText(text, lang);
-      if (lang === 'id') message.enText.textContent = translated; else message.idText.textContent = translated;
+      const translated = await translateText(text, sourceLang);
+      if (sourceLang === 'id') message.enText.textContent = translated; else message.idText.textContent = translated;
     } catch (error) {
-      const target = lang === 'id' ? message.enText : message.idText;
+      const target = sourceLang === 'id' ? message.enText : message.idText;
       target.textContent = 'Translation unavailable. Check your connection or try again.';
       toast(error.message.includes('429') ? 'Free translation limit reached. Try again later.' : 'Could not reach the free translation service.');
     }
     message.idBubble.classList.remove('pending'); message.enBubble.classList.remove('pending'); scrollBottom();
   }
 
+  // v1.5-style native browser speech recognition for microphone input.
+  function startMicrophoneRecognition() {
+    if (!SpeechRecognition || !['microphone', 'both'].includes(sessionSource)) return;
+    stopMicrophoneRecognition();
+    const rec = new SpeechRecognition();
+    rec.lang = els.mode.value === 'id' ? 'id-ID' : 'en-US';
+    rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+    rec.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        const transcript = cleanText(result[0]?.transcript || '');
+        if (!transcript) continue;
+        if (result.isFinal) { void commitPhrase(transcript, els.mode.value); }
+        else interim += `${transcript} `;
+      }
+      if (interim.trim()) {
+        els.preview.hidden = false;
+        els.previewText.textContent = `Microphone: ${interim.trim()}`;
+      }
+    };
+    rec.onerror = (event) => {
+      if (['no-speech', 'aborted'].includes(event.error)) return;
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        toast('Microphone speech recognition permission was denied. Check browser permissions.');
+      } else toast(`Microphone recognition issue: ${event.error}`);
+    };
+    rec.onend = () => {
+      if (active && !paused && recognizer === rec) {
+        setTimeout(() => { if (active && !paused && recognizer === rec) { try { rec.start(); } catch (_) {} } }, 350);
+      }
+    };
+    recognizer = rec;
+    try { rec.start(); } catch (error) { console.warn('SpeechRecognition start failed:', error); toast('Could not start microphone recognition. Try restarting the session.'); }
+  }
+  function stopMicrophoneRecognition() {
+    if (!recognizer) return;
+    const old = recognizer; recognizer = null;
+    old.onend = null; try { old.stop(); } catch (_) {}
+  }
+
   async function loadTranscriber() {
     if (transcriber) return transcriber;
     if (modelPromise) return modelPromise;
     modelPromise = (async () => {
-      els.title.textContent = 'Loading speech model…';
-      els.description.textContent = 'First use downloads a multilingual model (tens of MB). Your browser caches it for next time.';
-      els.preview.hidden = false; els.previewText.textContent = 'Preparing on-device speech recognition…';
+      els.title.textContent = 'Loading desktop speech model…';
+      els.description.textContent = 'First desktop-audio use downloads Whisper Tiny; the browser caches it for next time.';
+      els.preview.hidden = false; els.previewText.textContent = 'Preparing desktop speech recognition…';
       const model = 'onnx-community/whisper-tiny';
       try {
         if (navigator.gpu) {
@@ -138,7 +150,7 @@ import { pipeline, env } from '@huggingface/transformers';
         return transcriber;
       } catch (error) {
         modelPromise = null;
-        throw new Error(`Could not load the speech model: ${error.message || error}`);
+        throw new Error(`Could not load the desktop speech model: ${error.message || error}`);
       }
     })();
     return modelPromise;
@@ -148,57 +160,70 @@ import { pipeline, env } from '@huggingface/transformers';
     const ratio = inputRate / 16000; const outputLength = Math.floor(samples.length / ratio);
     const output = new Float32Array(outputLength);
     for (let i = 0; i < outputLength; i++) {
-      const position = i * ratio; const left = Math.floor(position); const right = Math.min(left + 1, samples.length - 1);
+      const position = i * ratio, left = Math.floor(position), right = Math.min(left + 1, samples.length - 1);
       const weight = position - left; output[i] = samples[left] * (1 - weight) + samples[right] * weight;
     }
     return output;
   }
+
+  // Lightweight voice-activity gate. It rejects quiet noise and sustained
+  // high-frequency chirps before Whisper sees a segment. This is a heuristic,
+  // not studio-grade noise cancellation; clear speech still works best.
+  function hasSpeechLikeActivity(samples, sampleRate) {
+    const frameSize = Math.max(1, Math.floor(sampleRate * 0.02)); // 20 ms
+    let activeFrames = 0, totalFrames = 0;
+    for (let start = 0; start + frameSize <= samples.length; start += frameSize) {
+      let energy = 0, crossings = 0, previous = samples[start];
+      for (let i = 0; i < frameSize; i++) {
+        const value = samples[start + i]; energy += value * value;
+        if ((value >= 0 && previous < 0) || (value < 0 && previous >= 0)) crossings++;
+        previous = value;
+      }
+      const rms = Math.sqrt(energy / frameSize);
+      const zcr = crossings / frameSize;
+      totalFrames++;
+      if (rms > 0.010 && zcr > 0.008 && zcr < 0.24) activeFrames++;
+    }
+    const ratio = activeFrames / Math.max(1, totalFrames);
+    return activeFrames >= 18 && ratio >= 0.055;
+  }
   async function transcribeSamples(samples) {
-    if (!samples.length || !active || paused) return;
+    if (!samples.length || !active || paused || !audioContext) return;
     const audio = downsampleTo16k(samples, audioContext.sampleRate);
-    let energy = 0; for (let i = 0; i < audio.length; i += 20) energy += audio[i] * audio[i];
-    if (Math.sqrt(energy / Math.max(1, Math.ceil(audio.length / 20))) < 0.008) return;
+    if (!hasSpeechLikeActivity(audio, 16000)) return;
     try {
-      els.preview.hidden = false; els.previewText.textContent = 'Recognizing speech…';
-      const options = { task: 'transcribe' };
-      if (els.mode.value === 'id') options.language = 'indonesian';
-      if (els.mode.value === 'en') options.language = 'english';
+      els.preview.hidden = false; els.previewText.textContent = 'Recognizing desktop speech…';
+      const options = { task: 'transcribe', language: els.mode.value === 'id' ? 'indonesian' : 'english' };
       const result = await transcriber(audio, options);
       const text = cleanText(result?.text || '');
-      if (text && active && !paused) await commitPhrase(text);
+      if (text && active && !paused) await commitPhrase(text, els.mode.value);
     } catch (error) {
-      console.error('Transcription error:', error); toast('Audio transcription failed. Try restarting the session.');
+      console.error('Desktop transcription error:', error); toast('Desktop audio transcription failed. Try restarting the session.');
     } finally {
-      if (active && !paused) els.previewText.textContent = 'Listening to audio…';
+      if (active && !paused) els.previewText.textContent = 'Listening for speech…';
     }
   }
   function takeQueuedSamples(count) {
     const output = new Float32Array(count); let written = 0;
     while (written < count && sampleQueue.length) {
-      const first = sampleQueue[0]; const take = Math.min(first.length, count - written);
+      const first = sampleQueue[0], take = Math.min(first.length, count - written);
       output.set(first.subarray(0, take), written); written += take;
       if (take === first.length) sampleQueue.shift(); else sampleQueue[0] = first.subarray(take);
     }
     queuedSamples -= written; return written === count ? output : output.subarray(0, written);
   }
   async function processQueuedAudio() {
-    const target = Math.floor((audioContext?.sampleRate || 48000) * 6);
+    const target = Math.floor((audioContext?.sampleRate || 48000) * 4);
     if (processing || !active || paused || queuedSamples < target) return;
     processing = true;
     try { await transcribeSamples(takeQueuedSamples(target)); }
     finally { processing = false; if (active && !paused && queuedSamples >= target) void processQueuedAudio(); }
   }
-  function setupAudioProcessor(streams) {
+  function setupDesktopProcessor(stream) {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     audioContext = new AudioCtx();
-    const mixed = audioContext.createMediaStreamDestination();
-    streams.forEach(stream => {
-      const audioOnly = new MediaStream(stream.getAudioTracks());
-      if (audioOnly.getAudioTracks().length) {
-        const source = audioContext.createMediaStreamSource(audioOnly); source.connect(mixed); audioSources.push(source);
-      }
-    });
-    const mixedSource = audioContext.createMediaStreamSource(mixed.stream);
+    const audioOnly = new MediaStream(stream.getAudioTracks());
+    desktopSource = audioContext.createMediaStreamSource(audioOnly);
     processor = audioContext.createScriptProcessor(4096, 1, 1);
     silentGain = audioContext.createGain(); silentGain.gain.value = 0;
     processor.onaudioprocess = (event) => {
@@ -207,72 +232,71 @@ import { pipeline, env } from '@huggingface/transformers';
       sampleQueue.push(new Float32Array(data)); queuedSamples += data.length;
       void processQueuedAudio();
     };
-    mixedSource.connect(processor); processor.connect(silentGain); silentGain.connect(audioContext.destination);
+    desktopSource.connect(processor); processor.connect(silentGain); silentGain.connect(audioContext.destination);
     if (audioContext.state === 'suspended') void audioContext.resume();
   }
   async function acquireAudio() {
     const source = els.source.value;
-    const streams = [];
-    // Invoke the screen/tab picker directly from the Start click, before any await,
-    // because browsers require transient user activation for getDisplayMedia().
+    // Start getDisplayMedia immediately from the button click; browsers require user activation.
     const displayRequest = (source === 'desktop' || source === 'both')
       ? navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }) : null;
     if (displayRequest) {
       displayStream = await displayRequest;
-      const tracks = displayStream.getAudioTracks();
-      if (!tracks.length) {
+      if (!displayStream.getAudioTracks().length) {
         displayStream.getTracks().forEach(track => track.stop()); displayStream = null;
-        throw new Error('No desktop audio was shared. In the share dialog, choose a tab/window/screen and enable “Share tab audio” or “Share system audio”.');
+        throw new Error('No desktop audio was shared. Select a tab/window/screen and enable “Share tab audio” or “Share system audio”.');
       }
       displayStream.getVideoTracks().forEach(track => { track.enabled = false; });
       displayStream.getAudioTracks().forEach(track => track.addEventListener('ended', () => { if (active) endSession(false); }));
-      streams.push(displayStream);
     }
     if (source === 'microphone' || source === 'both') {
+      if (!SpeechRecognition) throw new Error('Microphone speech recognition requires Google Chrome or Microsoft Edge.');
       micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-      streams.push(micStream);
     }
-    return streams;
   }
   function stopAudio() {
-    clearInterval(processTimer); processTimer = null;
     if (processor) { processor.onaudioprocess = null; try { processor.disconnect(); } catch (_) {} processor = null; }
     if (silentGain) { try { silentGain.disconnect(); } catch (_) {} silentGain = null; }
-    audioSources.forEach(source => { try { source.disconnect(); } catch (_) {} }); audioSources = [];
+    if (desktopSource) { try { desktopSource.disconnect(); } catch (_) {} desktopSource = null; }
     [micStream, displayStream].forEach(stream => stream?.getTracks().forEach(track => track.stop()));
     micStream = null; displayStream = null;
     if (audioContext) { void audioContext.close().catch(() => {}); audioContext = null; }
-    sampleQueue = []; queuedSamples = 0;
+    sampleQueue = []; queuedSamples = 0; processing = false;
   }
+
   async function beginSession() {
-    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || ((els.source.value === 'desktop' || els.source.value === 'both') && !navigator.mediaDevices?.getDisplayMedia)) {
+    const source = els.source.value;
+    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || ((source === 'desktop' || source === 'both') && !navigator.mediaDevices?.getDisplayMedia)) {
       toast('This audio source requires HTTPS and a modern desktop browser such as Chrome or Edge.'); return;
     }
     try {
-      sessionSource = els.source.value; els.mic.disabled = true;
+      sessionSource = source; els.mic.disabled = true;
       els.title.textContent = 'Requesting audio access…';
-      const streams = await acquireAudio();
+      await acquireAudio();
       active = true; paused = false; elapsedBeforePause = 0;
-      await loadTranscriber();
-      setupAudioProcessor(streams);
+      if (source === 'desktop' || source === 'both') {
+        await loadTranscriber();
+        setupDesktopProcessor(displayStream);
+      }
+      if (source === 'microphone' || source === 'both') startMicrophoneRecognition();
       startClock();
-      const sourceLabel = els.source.value === 'desktop' ? 'Desktop audio listening' : els.source.value === 'both' ? 'Microphone + desktop audio' : 'Microphone listening';
+      const sourceLabel = source === 'desktop' ? 'Desktop audio listening' : source === 'both' ? 'Microphone + desktop audio' : 'Microphone listening';
       setStatus(true, sourceLabel); els.mic.classList.add('listening'); els.mic.setAttribute('aria-label', 'Listening');
       els.title.textContent = 'Listening continuously';
-      els.description.textContent = 'Auto Detect is limited to Indonesian and English.';
+      els.description.textContent = 'Choose Indonesian or English to match the spoken language.';
       els.label.textContent = 'Session is live'; els.pause.disabled = false; els.stop.disabled = false;
-      els.pause.innerHTML = 'Ⅱ <span>Pause</span>'; els.preview.hidden = false; els.previewText.textContent = 'Listening to audio…';
-      els.support.textContent = 'Audio is processed locally in your browser. Keep this tab open; first model download may take a few minutes.';
+      els.pause.innerHTML = 'Ⅱ <span>Pause</span>'; els.preview.hidden = false; els.previewText.textContent = 'Listening for speech…';
+      els.support.textContent = 'Microphone uses the browser speech engine. Desktop audio uses local Whisper with voice-activity filtering. First desktop use may download the model.';
     } catch (error) {
-      active = false; stopAudio();
-      els.title.textContent = 'Start listening';
-      els.description.textContent = 'Choose an audio source and try again.';
+      active = false; stopMicrophoneRecognition(); stopAudio();
+      els.title.textContent = 'Start listening'; els.description.textContent = 'Choose an audio source and try again.';
       toast(error.message || 'Could not start audio capture.');
     } finally { els.mic.disabled = false; }
   }
   function pauseSession() {
     if (!active || paused) return;
     elapsedBeforePause += Math.floor((Date.now() - sessionStarted) / 1000); paused = true; stopClock();
+    stopMicrophoneRecognition();
     if (audioContext?.state === 'running') void audioContext.suspend();
     setStatus(false, 'Paused'); els.mic.classList.remove('listening');
     els.title.textContent = 'Conversation paused'; els.description.textContent = 'Resume when you are ready.';
@@ -282,17 +306,18 @@ import { pipeline, env } from '@huggingface/transformers';
     if (!active || !paused) return;
     paused = false;
     try { if (audioContext?.state === 'suspended') await audioContext.resume(); }
-    catch (_) { toast('Could not resume audio. Please restart the session.'); paused = true; return; }
+    catch (_) { toast('Could not resume desktop audio. Please restart the session.'); paused = true; return; }
+    if (sessionSource === 'microphone' || sessionSource === 'both') startMicrophoneRecognition();
     sessionStarted = Date.now(); startClock();
-    const sourceLabel = els.source.value === 'desktop' ? 'Desktop audio listening' : els.source.value === 'both' ? 'Microphone + desktop audio' : 'Microphone listening';
+    const sourceLabel = sessionSource === 'desktop' ? 'Desktop audio listening' : sessionSource === 'both' ? 'Microphone + desktop audio' : 'Microphone listening';
     setStatus(true, sourceLabel); els.mic.classList.add('listening');
-    els.title.textContent = 'Listening continuously'; els.description.textContent = 'Speech is transcribed on this device.';
-    els.pause.innerHTML = 'Ⅱ <span>Pause</span>'; els.preview.hidden = false; els.previewText.textContent = 'Listening to audio…';
+    els.title.textContent = 'Listening continuously'; els.description.textContent = 'Speech recognition is active.';
+    els.pause.innerHTML = 'Ⅱ <span>Pause</span>'; els.preview.hidden = false; els.previewText.textContent = 'Listening for speech…';
   }
   function endSession(showToast = true) {
     if (!active) return;
     if (!paused) elapsedBeforePause += Math.floor((Date.now() - sessionStarted) / 1000);
-    active = false; paused = false; stopAudio(); stopClock();
+    active = false; paused = false; stopMicrophoneRecognition(); stopAudio(); stopClock();
     setStatus(false, 'Audio off'); els.mic.classList.remove('listening');
     els.title.textContent = 'Start listening'; els.description.textContent = 'Choose microphone or desktop audio, then start.';
     els.label.textContent = 'Session ended'; els.pause.disabled = true; els.stop.disabled = true;
@@ -307,7 +332,10 @@ import { pipeline, env } from '@huggingface/transformers';
     els.messages.replaceChildren(); els.welcome.hidden = false; els.timer.textContent = '00:00';
     elapsedBeforePause = 0; if (active && !paused) sessionStarted = Date.now(); toast('Conversation cleared.');
   });
-  els.mode.addEventListener('change', () => toast(els.mode.value === 'auto' ? 'Auto Detect is limited to Indonesian and English.' : 'Speech language preference updated.'));
+  els.mode.addEventListener('change', () => {
+    if (active && !paused && (sessionSource === 'microphone' || sessionSource === 'both')) startMicrophoneRecognition();
+    toast('Speech language preference updated.');
+  });
   els.source.addEventListener('change', () => {
     if (active) { toast('End the current session before changing the audio source.'); els.source.value = sessionSource; }
   });
@@ -330,5 +358,9 @@ import { pipeline, env } from '@huggingface/transformers';
     if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { toast('Please enter a valid email address.'); return; }
     localStorage.setItem(CONTACT_KEY, value); els.settings.close(); toast('Settings saved.');
   });
-  window.addEventListener('beforeunload', () => { active = false; stopAudio(); });
+  window.addEventListener('beforeunload', () => { active = false; stopMicrophoneRecognition(); stopAudio(); });
+
+  if (!SpeechRecognition) {
+    els.support.textContent = 'Microphone mode requires Chrome or Edge. Desktop audio mode uses local Whisper and can still work without browser SpeechRecognition.';
+  }
 })();

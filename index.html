@@ -45,7 +45,7 @@
           <div class="welcome-state" id="welcomeState">
             <div class="welcome-icon">✳</div>
             <h2>Your conversation starts here</h2>
-            <p>Choose an audio source, start listening, and allow access. Auto Detect is restricted to Indonesian and English only.</p>
+            <p>Choose an audio source, start listening, and allow access. Microphone uses the v1.5 browser speech engine. Desktop audio uses local Whisper.</p>
             <div class="welcome-hint"><span>🇮🇩</span> Halo, apa kabar? <span class="hint-arrow">→</span> <span>🇬🇧</span> Hello, how are you?</div>
           </div>
           <div class="messages" id="messages"></div>
@@ -60,7 +60,6 @@
             <div class="select-controls">
               <label class="mode-select-wrap">LANGUAGE
                 <select id="speechMode" aria-label="Speech language mode">
-                  <option value="auto">Auto Detect (ID / EN only)</option>
                   <option value="id">Bahasa Indonesia</option>
                   <option value="en">English</option>
                 </select>
@@ -88,14 +87,14 @@
       </section>
     </main>
 
-    <footer class="footer"><span>TRANSLIVE <i>•</i> INDONESIAN ↔ ENGLISH</span><span>Local speech AI · No OpenAI key required</span></footer>
+    <footer class="footer"><span>TRANSLIVE <i>•</i> INDONESIAN ↔ ENGLISH</span><span>Hybrid speech recognition · No OpenAI key required</span></footer>
   </div>
 
   <dialog id="settingsDialog" class="settings-dialog">
     <form method="dialog"><div class="dialog-head"><div><span class="eyebrow">PREFERENCES</span><h2>Settings</h2></div><button class="icon-button" aria-label="Close settings">✕</button></div>
       <label class="setting-row"><span><b>Translation service</b><small>MyMemory free public API</small></span><span class="setting-tag">NO KEY</span></label>
       <label class="setting-field">Contact email (optional)<input id="contactEmail" type="email" placeholder="you@example.com"><small>Optional. MyMemory states that a valid email can increase its daily anonymous allowance. It is sent with translation requests.</small></label>
-      <div class="settings-warning">Speech recognition runs locally in your browser after the first model download. Translated text is sent to the MyMemory translation service. Desktop audio access depends on browser and operating-system sharing support.</div>
+      <div class="settings-warning">Microphone recognition uses the browser speech engine. Desktop audio recognition runs locally after the first model download. Translated text is sent to the MyMemory translation service. Desktop audio access depends on browser and operating-system sharing support.</div>
       <button class="primary-button" id="saveSettings" value="save">Save settings</button>
     </form>
   </dialog>
