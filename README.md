@@ -1,63 +1,47 @@
-# Translive — Free MVP (Indonesia ↔ English)
+# Translive v1.6
 
-A responsive browser-based live speech translator starter intended for Vercel. This version does **not** use OpenAI, does not require an API key, and does not require a credit card.
+Live Indonesian ↔ English conversation translator with:
 
-## Important: what is free, and what are the limits?
-
-- **Speech recognition:** uses the browser's Web Speech API (`SpeechRecognition`). Chrome/Edge are recommended. Browser speech recognition may rely on the browser vendor's online recognition service; it is not guaranteed to work offline and browser support varies.
-- **Translation:** uses the public MyMemory translation endpoint directly from the browser. Its published anonymous limit is 5,000 characters/day. MyMemory says adding a valid contact email via the `de` parameter can raise the limit to 50,000 characters/day. The email is optional and is sent with translation requests if entered in Settings.
-- **No API key:** no `OPENAI_API_KEY`, LibreTranslate key, or other secret is needed.
-- **Availability:** MyMemory is a public third-party service. It may rate-limit, change its policy, or be temporarily unavailable. This is a free test build, not a guaranteed production SLA.
-- **Automatic speech-language detection:** Auto mode starts Indonesian and English browser recognition candidates with a short stagger, gathers finalized alternatives briefly, then scores them using recognition confidence and language-specific word clues to choose one transcript. This is still heuristic: Web Speech API does not expose reliable built-in automatic language identification, and simultaneous recognition support varies by browser. For best accuracy, fixed Indonesian or English modes remain available.
-- **Translation timing:** interim speech is shown in the listening preview. Paired chat bubbles are created when the browser finalizes a phrase; the translation appears after the MyMemory request completes. This is near-real-time, not word-by-word simultaneous interpretation.
+- Multilingual Whisper speech recognition running in the browser (Auto Detect; no browser SpeechRecognition API).
+- Microphone, desktop/tab audio, or both audio sources.
+- Local audio transcription after the first model download; the model is cached by the browser.
+- MyMemory free translation API for the translated side of each message.
+- Fullscreen conversation workspace.
 
 ## Run locally
-
-Requirements: Node.js 18+.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite, preferably in Google Chrome. `localhost` is treated as a secure context by modern browsers, so microphone permission can be granted.
+Open the HTTPS deployment or the local Vite address in a modern desktop browser. Vite's localhost development server is treated as a secure context by browsers.
 
 ## Deploy to Vercel
 
-1. Extract this ZIP.
-2. Open the `live-translator` folder and push the files inside it (not the parent folder) to the root of a GitHub repository. `index.html`, `app.js`, `styles.css`, and `package.json` must be at the repository root.
-3. In Vercel, import that repository. Set the Root Directory to `./` (repository root).
-4. Framework preset: **Vite**. Build command: `npm run build`. Output directory: `dist`. Install command: `npm install`.
-5. Deploy. **Do not add any API key environment variables.**
-6. Open the deployed HTTPS URL in Chrome/Edge, click the microphone button, and grant microphone permission.
+- Framework preset: Vite
+- Build command: `npm run build`
+- Output directory: `dist`
+- No API key or environment variable is required.
 
-Important: this release loads `app.js` as a Vite-processed ES module. Do not deploy the raw source folder as a static directory without running the Vite production build.
+## Desktop audio instructions
 
-## Version 1.4 updates
+1. Choose **Desktop audio** (or **Both sources** to capture the microphone too).
+2. Click the microphone/start button.
+3. In the browser sharing dialog, select the browser tab, window, or entire screen that contains the sound.
+4. Turn on **Share tab audio** or **Share system audio** when the browser offers that option, then click Share.
+5. Play the video, meeting, or other audio. Keep this Translive tab open.
 
-- Auto mode now batches competing Indonesian/English recognition candidates, scores them, and commits one selected transcript to reduce duplicate or conflicting bubbles.
-- The conversation card now has a fixed height; only the chat history area scrolls internally as messages accumulate.
+Desktop/system audio capture is controlled by the browser and operating system. Chrome/Edge on desktop are recommended. Capturing a browser tab's audio is generally the most reliable. Capturing sound from separate desktop applications (such as the Teams or Zoom desktop apps) depends on whether the browser/OS exposes system audio in the screen-sharing picker. If no audio track is offered, share the meeting/browser tab instead, or use the microphone option with speakers/headphones arranged to avoid echo.
 
-## How to test
+## First run and performance
 
-1. Start with Speech Mode = Auto detect (experimental).
-2. Say a short Indonesian sentence, e.g. “Halo, nama saya Zaky. Apa kabar?”
-3. Wait for the blue Indonesian bubble and red English translation.
-4. Say a short English sentence, e.g. “Hello, nice to meet you. How are you?”
-5. If Auto mode chooses the wrong source language, change Speech Mode to Bahasa Indonesia or English and repeat.
-6. Try Pause, Resume, End, Clear, and a mobile viewport.
+The first start downloads a multilingual Whisper Tiny model from Hugging Face. This can take a while depending on the connection; the browser caches model files for later sessions. Speech is processed in short audio segments, so this is near-live rather than zero-latency streaming. A device with a supported GPU/WebGPU can be faster; otherwise the app falls back to CPU/WASM and may be slower. Keep the browser tab open while listening.
 
-## Privacy and microphone behavior
-
-The microphone starts only after the user clicks Start and grants browser permission; a website cannot silently turn on a microphone on page load. Audio recognition is handled by the browser's speech-recognition implementation. The app sends recognized text (not raw audio) to MyMemory for translation. Do not use this public test build for confidential conversations.
-
-## Project structure
-
-- `index.html` — app shell and UI
-- `styles.css` — responsive dark UI
-- `app.js` — speech recognition, chat bubbles, translation requests
-- `vercel.json` — static deployment headers
+Speech transcription runs locally in the browser. Text is sent to MyMemory's public translation service to obtain the Indonesian/English translation; that service may impose rate limits or temporary availability limits.
 
 ## Notes
 
-This is an MVP intended for testing the overall interaction and UI. It is not guaranteed to provide uninterrupted transcription, perfect automatic language detection, or unlimited free translation. For stable high-volume use, a self-hosted speech/translation stack or a paid provider would be needed.
+- Use the **Auto Detect** language setting for mixed Indonesian/English conversations. Fixed language settings are available if the source language is known.
+- Use HTTPS in production. Browser screen/tab sharing requires an explicit user action and cannot start silently.
+- The app cannot capture protected/DRM audio or system audio when the browser/OS does not expose it to screen sharing.

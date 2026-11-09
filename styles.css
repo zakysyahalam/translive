@@ -71,3 +71,8 @@
   .head-actions { gap: 8px; }
   .maximize-button { width: 33px; height: 33px; }
 }
+/* v1.6 audio source and language controls */
+.select-controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.source-select-wrap{display:flex;align-items:center;gap:8px}
+.mode-select-wrap select{max-width:180px}
+@media(max-width:600px){.select-controls{gap:7px 10px}.mode-select-wrap{gap:5px}.mode-select-wrap select{max-width:135px}.control-topline{align-items:flex-start}}
