@@ -6,9 +6,6 @@
   <meta name="theme-color" content="#080d18" />
   <meta name="description" content="Live bilingual speech translator for Indonesian and English." />
   <title>Translive — Indonesian ↔ English</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -19,7 +16,7 @@
         <span>trans<span class="brand-light">live</span></span>
       </a>
       <div class="topbar-right">
-        <span class="privacy-pill"><i></i> On-device AI transcription</span>
+        <span class="privacy-pill"><i></i> On-device speech recognition</span>
         <button class="icon-button" id="settingsBtn" aria-label="Settings" title="Settings">⚙</button>
       </div>
     </header>
@@ -45,7 +42,7 @@
           <div class="welcome-state" id="welcomeState">
             <div class="welcome-icon">✳</div>
             <h2>Your conversation starts here</h2>
-            <p>Choose an audio source, start listening, and allow access. Microphone uses the v1.5 browser speech engine. Desktop audio uses local Whisper.</p>
+            <p>Choose an audio source, start listening, and allow access. Microphone and desktop audio are transcribed locally with Whisper Tiny.</p>
             <div class="welcome-hint"><span>🇮🇩</span> Halo, apa kabar? <span class="hint-arrow">→</span> <span>🇬🇧</span> Hello, how are you?</div>
           </div>
           <div class="messages" id="messages"></div>
@@ -82,20 +79,19 @@
               <button class="end-button" id="stopBtn" disabled>■ <span>End</span></button>
             </div>
           </div>
-          <div class="support-note" id="supportNote">Chrome or Edge desktop recommended. For desktop audio, share a tab or screen and enable its audio option.</div>
+          <div class="support-note" id="supportNote">Microphone and desktop audio are transcribed locally. Desktop capture still requires selecting a tab or screen because of browser restrictions.</div>
         </div>
       </section>
     </main>
 
-    <footer class="footer"><span>TRANSLIVE <i>•</i> INDONESIAN ↔ ENGLISH</span><span>Hybrid speech recognition · No OpenAI key required</span></footer>
+    <footer class="footer"><span>TRANSLIVE <i>•</i> INDONESIAN ↔ ENGLISH</span><span>Local Whisper speech recognition · Text translation via MyMemory</span></footer>
   </div>
 
   <dialog id="settingsDialog" class="settings-dialog">
     <form method="dialog"><div class="dialog-head"><div><span class="eyebrow">PREFERENCES</span><h2>Settings</h2></div><button class="icon-button" aria-label="Close settings">✕</button></div>
       <label class="setting-row"><span><b>Translation service</b><small>MyMemory free public API</small></span><span class="setting-tag">NO KEY</span></label>
-      <label class="setting-field">Contact email (optional)<input id="contactEmail" type="email" placeholder="you@example.com"><small>Optional. MyMemory states that a valid email can increase its daily anonymous allowance. It is sent with translation requests.</small></label>
-      <div class="settings-warning">Microphone recognition uses the browser speech engine. Desktop audio recognition runs locally after the first model download. Translated text is sent to the MyMemory translation service. Desktop audio access depends on browser and operating-system sharing support.</div>
-      <button class="primary-button" id="saveSettings" value="save">Save settings</button>
+      <div class="settings-warning">Microphone and desktop speech recognition run locally in your browser with Whisper Tiny after the model is downloaded. Translive does not upload raw microphone or desktop audio. The recognized text is sent to MyMemory to produce translations. MyMemory is an external service and may process or retain submitted text under its own policies. Desktop capture still requires selecting a tab or screen because browser APIs require display capture permission.</div>
+      <button class="primary-button" value="close">Close</button>
     </form>
   </dialog>
   <div class="toast" id="toast" role="status"></div>

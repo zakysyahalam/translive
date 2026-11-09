@@ -1,13 +1,23 @@
-# Translive v1.8 — Hybrid Recognition
+# Translive v1.9 — Privacy-First Local Recognition
 
 Live Indonesian ↔ English conversation translator.
 
-- **Microphone:** uses the browser's native Speech Recognition engine, restoring the v1.5 approach for the selected language (`id-ID` or `en-US`).
-- **Desktop audio:** captures a shared browser tab/window/screen and transcribes it locally with Whisper Tiny. A lightweight voice-activity gate filters quiet audio and some sustained high-frequency background noise before transcription.
-- **Both sources:** microphone and desktop audio are processed separately to avoid mixing and unnecessary duplicate recognition.
-- **Language selection:** choose Bahasa Indonesia or English. Auto Detect has been removed.
-- **Translation:** MyMemory free translation API.
-- **Fullscreen conversation workspace.**
+## What is new in v1.9
+
+- **Microphone:** speech recognition now runs locally in the browser with Whisper Tiny. It no longer uses the browser's cloud-backed `SpeechRecognition` service.
+- **Desktop audio:** continues to use local Whisper Tiny with a lightweight voice-activity gate.
+- **Both sources:** microphone and desktop audio are captured and transcribed as separate streams, with duplicate phrase suppression.
+- **Video privacy:** browser display capture requires a video track, but Translive stops that track immediately after permission is granted and never reads video frames. Only the shared audio track is passed to the audio processor.
+- **No raw audio upload or recording:** the app contains no MediaRecorder, WebSocket, or audio/video upload endpoint.
+- **No external web fonts:** the interface uses system fonts.
+- **Translation:** recognized text is sent to the MyMemory public translation API. MyMemory is an external service and may process or retain submitted text under its own policies.
+- **No contact email field:** translation requests do not include a user email address.
+
+## Privacy boundaries
+
+Speech recognition happens locally after Whisper Tiny has been downloaded and loaded in the browser. The model files are fetched from Hugging Face on first use and may be cached by the browser. Audio samples are not sent to Hugging Face, Vercel, or MyMemory by the application. The translated text request is sent to `api.mymemory.translated.net`. Browser/OS permissions and the integrity of the browser and deployed JavaScript remain important security boundaries.
+
+The browser's `getDisplayMedia()` API requires display capture permission and generally requires a video track even when an app only needs audio. Translive immediately calls `stop()` on every returned video track, then processes only the audio track. The browser may still show a sharing indicator or a selection dialog.
 
 ## Run locally
 
@@ -31,14 +41,14 @@ Open the HTTPS deployment or local Vite address in Chrome or Edge.
 2. Click Start.
 3. In the browser sharing dialog, select the tab, window, or screen containing the sound.
 4. Enable **Share tab audio** or **Share system audio**, if offered.
-5. Choose the correct language (Indonesian or English), then play the audio.
+5. Choose Bahasa Indonesia or English and play the audio.
 
 Browser and operating-system support controls which desktop audio can be shared. Sharing a browser tab is generally the most reliable. The app cannot capture protected/DRM audio or audio that the browser/OS does not expose.
 
-## Recognition behavior and noise filtering
+## Recognition and noise filtering
 
-The microphone uses the browser's speech engine and does not require a Whisper download. Desktop audio uses Whisper Tiny locally in the browser; the first use downloads and caches the model. Desktop audio is divided into short segments and passed through a lightweight voice-activity heuristic based on signal energy and zero-crossing rate. This helps ignore silence, quiet noise, and some cricket-like high-frequency sounds. It is not professional noise cancellation, and some bird calls or other speech-like sounds may still trigger recognition. Clear speech and a reasonable audio level give the best results.
+Whisper Tiny runs locally for both microphone and desktop audio. The first use downloads the model; subsequent use may use the browser cache. Audio is processed in four-second chunks. A lightweight voice-activity heuristic based on signal energy and zero-crossing rate filters silence and some background noise before transcription. It is not professional noise cancellation; bird calls, crickets, or other speech-like sounds may still trigger recognition.
 
-## Privacy and translation
+## Translation and third-party services
 
-Speech recognition runs in the browser (native browser service for microphone; local Whisper for desktop audio). Recognized text is sent to MyMemory's public translation service to obtain the translated side of each message. MyMemory may impose rate limits.
+Only recognized text is sent to MyMemory for translation. Do not use Translive with confidential conversations unless you are comfortable sending their recognized text to an external translation provider. Model downloads use Hugging Face hosting. No raw audio/video upload is implemented in the application.
