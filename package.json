@@ -1,6 +1,6 @@
 {
   "name": "translive",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "description": "Local AI-powered Indonesian-English live speech translator with microphone and desktop audio capture",
   "scripts": {

@@ -72,21 +72,28 @@ import { pipeline, env } from '@huggingface/transformers';
     if (data.responseStatus !== 200 || !data.responseData?.translatedText) throw new Error(data.responseDetails || 'Translation unavailable.');
     return data.responseData.translatedText;
   }
+  // Auto Detect intentionally accepts only Indonesian or English. Whisper can
+  // recognize many languages, so we validate its transcript against a compact
+  // two-language vocabulary before allowing it into the conversation.
+  const LANGUAGE_MARKERS = {
+    id: new Set(['saya','aku','kamu','anda','yang','dan','tidak','apa','kabar','ini','itu','dengan','untuk','kalau','sudah','bisa','ingin','dari','banget','bagaimana','karena','sedang','adalah','akan','belum','mereka','kita','tetapi','atau','dimana','kapan','siapa','mengapa','tolong','terima','kasih','selamat','nggak','enggak','punya','jadi','pada','dalam','lebih','juga','cuma','masih','tadi','nanti','sekarang','iya','enggak','aja','sih','kok','gimana','kenapa','berapa','boleh','mau','ada','bukan','udah','belum']),
+    en: new Set(['the','you','is','are','and','what','how','this','that','with','for','have','would','could','hello','please','thank','today','want','can','we','they','he','she','it','my','your','our','me','does','did','not','yes','no','good','morning','name','because','but','or','where','when','who','why','welcome','nice','meet','like','need','going','will','was','were','has','had','there','here','from','about','just','really','right','okay','sure','hello','thanks','goodbye','are','am','is','do','does','done','could','should','would','have','has','had','please','sorry','morning','afternoon','evening','night','work','meeting','today','tomorrow'])
+  };
   function languageScore(text, lang) {
-    const t = ` ${text.toLowerCase().replace(/[^a-zà-ÿ\s]/g, ' ')} `;
-    const words = lang === 'id'
-      ? [' saya ',' aku ',' kamu ',' anda ',' yang ',' dan ',' tidak ',' apa ',' ini ',' itu ',' dengan ',' untuk ',' kalau ',' sudah ',' bisa ',' ingin ',' dari ',' banget ',' bagaimana ',' karena ',' sedang ',' adalah ',' akan ',' belum ',' mereka ',' kita ',' tetapi ',' atau ',' dimana ',' kapan ',' siapa ',' mengapa ',' tolong ',' terima kasih ',' selamat ',' nggak ',' enggak ',' punya ',' jadi ',' pada ',' dalam ',' lebih ',' juga ',' cuma ',' masih ',' sudah ',' belum ',' tadi ',' nanti ',' sekarang ']
-      : [' the ',' you ',' is ',' are ',' and ',' what ',' how ',' this ',' that ',' with ',' for ',' have ',' would ',' could ',' hello ',' please ',' thank ',' today ',' want ',' can ',' i ',' we ',' they ',' he ',' she ',' it ',' my ',' your ',' our ',' me ',' do ',' does ',' did ',' not ',' yes ',' no ',' good ',' morning ',' name ',' because ',' but ',' or ',' where ',' when ',' who ',' why ',' welcome ',' nice ',' meet ',' like ',' need ',' going ',' will ',' was ',' were ',' have ',' has ',' had ',' there ',' here ',' from ',' about ',' just ',' really ',' right ',' okay ',' sure '];
-    return words.reduce((score, word) => score + (t.includes(word) ? 1 : 0), 0);
+    const words = cleanText(text.toLowerCase()).match(/[a-zà-ÿ]+/g) || [];
+    return words.reduce((score, word) => score + (LANGUAGE_MARKERS[lang].has(word) ? 1 : 0), 0);
   }
   function detectLanguage(text) {
     if (els.mode.value === 'id') return 'id';
     if (els.mode.value === 'en') return 'en';
     const id = languageScore(text, 'id'), en = languageScore(text, 'en');
-    if (id > en) return 'id'; if (en > id) return 'en';
-    // Indonesian and English share many short words; use Indonesian-specific morphology as a tie-breaker.
-    if (/\b(ber\w+|me\w+|meng\w+|men\w+|ter\w+|di\w+|ke\w+|nya|kan|lah)\b/i.test(text)) return 'id';
-    return 'en';
+    if (id === 0 && en === 0) return null;
+    if (id > en) return 'id';
+    if (en > id) return 'en';
+    // Indonesian affixes and particles help resolve short, otherwise ambiguous phrases.
+    if (/\b(ber[a-z]+|meng[a-z]+|men[a-z]+|ter[a-z]+|\w+nya|\w+kan|\w+lah|aja|sih|kok|gimana|enggak|nggak)\b/i.test(text)) return 'id';
+    // Do not guess a language when the evidence is tied or too weak.
+    return null;
   }
   async function commitPhrase(rawText) {
     const text = cleanText(rawText);
@@ -94,7 +101,15 @@ import { pipeline, env } from '@huggingface/transformers';
     const stamp = Date.now();
     if (text.toLowerCase() === lastFinal.toLowerCase() && stamp - lastFinalAt < 2500) return;
     lastFinal = text; lastFinalAt = stamp;
-    const lang = detectLanguage(text); const message = makePair(text, lang, true);
+    const lang = detectLanguage(text);
+    if (!lang) {
+      if (els.mode.value === 'auto') {
+        els.preview.hidden = false;
+        els.previewText.textContent = 'Auto Detect supports Indonesian and English only. Keep speaking in either language.';
+      }
+      return;
+    }
+    const message = makePair(text, lang, true);
     try {
       const translated = await translateText(text, lang);
       if (lang === 'id') message.enText.textContent = translated; else message.idText.textContent = translated;
@@ -244,7 +259,7 @@ import { pipeline, env } from '@huggingface/transformers';
       const sourceLabel = els.source.value === 'desktop' ? 'Desktop audio listening' : els.source.value === 'both' ? 'Microphone + desktop audio' : 'Microphone listening';
       setStatus(true, sourceLabel); els.mic.classList.add('listening'); els.mic.setAttribute('aria-label', 'Listening');
       els.title.textContent = 'Listening continuously';
-      els.description.textContent = 'Speech is transcribed on this device. Speak Indonesian or English.';
+      els.description.textContent = 'Auto Detect is limited to Indonesian and English.';
       els.label.textContent = 'Session is live'; els.pause.disabled = false; els.stop.disabled = false;
       els.pause.innerHTML = 'Ⅱ <span>Pause</span>'; els.preview.hidden = false; els.previewText.textContent = 'Listening to audio…';
       els.support.textContent = 'Audio is processed locally in your browser. Keep this tab open; first model download may take a few minutes.';
@@ -292,7 +307,7 @@ import { pipeline, env } from '@huggingface/transformers';
     els.messages.replaceChildren(); els.welcome.hidden = false; els.timer.textContent = '00:00';
     elapsedBeforePause = 0; if (active && !paused) sessionStarted = Date.now(); toast('Conversation cleared.');
   });
-  els.mode.addEventListener('change', () => toast('Speech language preference updated.'));
+  els.mode.addEventListener('change', () => toast(els.mode.value === 'auto' ? 'Auto Detect is limited to Indonesian and English.' : 'Speech language preference updated.'));
   els.source.addEventListener('change', () => {
     if (active) { toast('End the current session before changing the audio source.'); els.source.value = sessionSource; }
   });

@@ -45,3 +45,8 @@ Speech transcription runs locally in the browser. Text is sent to MyMemory's pub
 - Use the **Auto Detect** language setting for mixed Indonesian/English conversations. Fixed language settings are available if the source language is known.
 - Use HTTPS in production. Browser screen/tab sharing requires an explicit user action and cannot start silently.
 - The app cannot capture protected/DRM audio or system audio when the browser/OS does not expose it to screen sharing.
+
+
+## Auto Detect language scope (v1.7)
+
+Auto Detect is intentionally limited to Indonesian and English. The multilingual Whisper model may produce text in other languages, but the app validates each transcript against Indonesian/English vocabulary and Indonesian morphology before displaying or translating it. Segments that do not contain enough evidence for either supported language are ignored. For best results, use complete phrases rather than isolated words. Manual Bahasa Indonesia and English modes remain available.
